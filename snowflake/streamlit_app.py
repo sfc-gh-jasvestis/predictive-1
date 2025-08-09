@@ -6,9 +6,15 @@ from datetime import datetime, timedelta
 from typing import List
 
 from snowflake.snowpark.context import get_active_session
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score, confusion_matrix
+
+# Try importing scikit-learn; if unavailable in Snowflake environment, disable modeling
+try:
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import roc_auc_score, confusion_matrix
+    SKLEARN_AVAILABLE = True
+except Exception:
+    SKLEARN_AVAILABLE = False
 
 st.set_page_config(page_title="Predictive Maintenance (Snowflake)", page_icon="🛠️", layout="wide")
 
@@ -24,6 +30,7 @@ forecast_days = st.sidebar.slider("Forecast window (days)", 7, 60, 30)
 
 if st.sidebar.button("Reseed data in Snowflake"):
     with st.spinner("Seeding data in Snowflake…"):
+        # Assumes app is created in the same schema as the procedure; otherwise fully-qualify the proc name
         res = session.sql(f"CALL SEED_DATA({num_machines}, {num_days}, {seed})").collect()
         st.sidebar.success(str(res[0][0]) if res else "Seeded")
 
@@ -83,7 +90,7 @@ X, y, meta, feature_cols = make_supervised(raw, horizon_days=horizon_days)
 
 @st.cache_resource(show_spinner=True)
 def train_classifier(X: pd.DataFrame, y: pd.Series, seed: int):
-    if len(X) < 50 or len(np.unique(y)) < 2:
+    if (not SKLEARN_AVAILABLE) or len(X) < 50 or len(np.unique(y)) < 2:
         return None, {"auc_roc": float("nan"), "prevalence_test": float(y.mean()) if len(y) else float("nan")}
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=seed, stratify=y)
     clf = RandomForestClassifier(n_estimators=300, min_samples_split=4, min_samples_leaf=2, n_jobs=-1, random_state=seed, class_weight="balanced_subsample")
@@ -92,6 +99,8 @@ def train_classifier(X: pd.DataFrame, y: pd.Series, seed: int):
     roc = roc_auc_score(y_test, y_proba) if len(np.unique(y_test)) > 1 else float("nan")
     return clf, {"auc_roc": roc, "prevalence_test": float(y_test.mean())}
 
+if not SKLEARN_AVAILABLE:
+    st.info("scikit-learn is not installed in this Streamlit environment. You can add it via the app's Packages settings in Snowsight. The app will still run with analytics, but model training and risk scoring will be disabled.")
 model, metrics = train_classifier(X, y, seed=seed)
 
 # Score historical risk

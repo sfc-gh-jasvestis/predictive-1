@@ -6,7 +6,7 @@ CREATE OR REPLACE PROCEDURE SEED_DATA(NUM_MACHINES INTEGER, NUM_DAYS INTEGER, SE
 RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = 3.10
-PACKAGES = ('snowflake.snowpark.session', 'snowflake.snowpark.functions', 'pandas', 'numpy')
+PACKAGES = ('snowflake-snowpark-python', 'pandas', 'numpy')
 HANDLER = 'run'
 AS
 $$
