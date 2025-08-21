@@ -99,14 +99,10 @@ def run(session: Session, NUM_MACHINES: int, NUM_DAYS: int, SEED: int) -> str:
         series.append(simulate_machine_series(int(mid), NUM_DAYS, weather, SEED))
     daily = pd.concat(series, ignore_index=True)
 
-    # Write tables
-    session.sql("CREATE OR REPLACE TABLE WEATHER_DAILY (date DATE, ambient_temp DOUBLE, humidity DOUBLE, rainfall_mm DOUBLE)").collect()
-    session.sql("CREATE OR REPLACE TABLE MACHINES (machine_id INT, model STRING, installed_on DATE)").collect()
-    session.sql("CREATE OR REPLACE TABLE MACHINE_DAILY AS SELECT 1 AS machine_id, CURRENT_DATE() AS date, 0 AS age_days, 0.0 AS usage_hours, 0.0 AS internal_temp, 0.0 AS vibration, 0.0 AS ambient_temp, 0.0 AS humidity, 0.0 AS rainfall_mm, 0 AS breakdown, 0 AS serviced WHERE 1=0").collect()
-
-    session.write_pandas(weather, 'WEATHER_DAILY', overwrite=True)
-    session.write_pandas(machines, 'MACHINES', overwrite=True)
-    session.write_pandas(daily, 'MACHINE_DAILY', overwrite=True)
+    # Persist tables using Snowpark (avoids external dependencies like pyarrow)
+    session.create_dataframe(weather).write.mode("overwrite").save_as_table("WEATHER_DAILY")
+    session.create_dataframe(machines).write.mode("overwrite").save_as_table("MACHINES")
+    session.create_dataframe(daily).write.mode("overwrite").save_as_table("MACHINE_DAILY")
 
     return f"Seeded WEATHER_DAILY={len(weather)}, MACHINES={len(machines)}, MACHINE_DAILY={len(daily)} rows."
 $$;
